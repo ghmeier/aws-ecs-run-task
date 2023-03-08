@@ -5,23 +5,18 @@ Runs a one-off task on AWS ECS Fargate.
 Usage
 ``` yaml
 - name: Run migration
-  uses: noelzubin/aws-ecs-run-task@v1.0
+  uses: ghmeier/aws-ecs-run-task@v1.0
   with:
     cluster: staging
+    service: source-service
     task-defintion: run_migration_task_def
-    subnets: sb-123123
-    security-groups: sg-1231231
-
 - name: Run more Migrations
-  uses: noelzubin/aws-ecs-run-task@v1.0
+  uses: ghmeier/aws-ecs-run-task@v1.0
   with:
     cluster: staging
     task-defintion: server_backend_task_def
-    subnets: sb-123123
-    security-groups: sg-1231231
-    assign-public-ip: DISABLED
-    container-override: server
-    container-command: |
+    override-container: server
+    override-container-command: |
         sh
         -c
         cd database && python migrate.py

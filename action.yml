@@ -10,11 +10,8 @@ inputs:
   task-definition:
     description: 'The name of the task-definition'
     required: true
-  subnets:
-    description: 'The list of subnets'
-    required: true
-  security-groups:
-    description: 'The list of Security Groups'
+  service:
+    description: 'The service to pull subnet and security groups from'
     required: true
   override-container:
     description: 'The container whose command should be overridden'
@@ -22,10 +19,6 @@ inputs:
   override-container-command:
     description: 'The command to to be run on the overrided container'
     required: false
-  assign-public-ip:
-    description: 'Assign public IP to the task. (ENABLED/DISABLED)'
-    required: false
-    default: 'ENABLED'
 
 outputs:
   task-arn:
