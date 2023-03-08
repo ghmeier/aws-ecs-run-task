@@ -1,7 +1,6 @@
 const core = require("@actions/core");
 const AWS = require("aws-sdk");
 const path = require('path');
-const yaml = require('yaml');
 const fs = require('fs');
 
 const ecs = new AWS.ECS();
@@ -116,15 +115,13 @@ function validateProxyConfigurations(taskDef){
 const main = async () => {
   const cluster = core.getInput("cluster", { required: true });
   const taskDefinitionFile = core.getInput("task-definition", { required: true });
-  const subnets = core.getMultilineInput("subnets", { required: true });
-  const securityGroups = core.getMultilineInput("security-groups", {
-    required: true,
-  });
+  const service = core.getInput('service', { required: true });
   const taskDefPath = path.isAbsolute(taskDefinitionFile) ?
         taskDefinitionFile :
         path.join(process.env.GITHUB_WORKSPACE, taskDefinitionFile);
   const fileContents = fs.readFileSync(taskDefPath, 'utf8');
-  const taskDefContents = maintainValidObjects(removeIgnoredAttributes(cleanNullKeys(yaml.parse(fileContents))));
+  const taskDefContents = maintainValidObjects(removeIgnoredAttributes(cleanNullKeys(JSON.parse(fileContents))));
+
   let registerResponse;
   try {
     registerResponse = await ecs.registerTaskDefinition(taskDefContents).promise();
@@ -136,8 +133,28 @@ const main = async () => {
   }
   const taskDefArn = registerResponse.taskDefinition.taskDefinitionArn;
   core.setOutput('task-definition-arn', taskDefArn);
-  const assignPublicIp =
-        core.getInput("assign-public-ip", { required: false }) || "ENABLED";
+
+
+  let networkConfiguration;
+  try {
+    // Get network configuration from aws directly from describe services
+    core.debug("Getting information from service...");
+    const info = await ecs.describeServices({ cluster, services: [service] }).promise();
+
+    if (!info || !info.services[0]) {
+      throw new Error(`Could not find service ${service} in cluster ${cluster}`);
+    }
+
+    if (!info.services[0].networkConfiguration) {
+      throw new Error(`Service ${service} in cluster ${cluster} does not have a network configuration`);
+    }
+
+    networkConfiguration = info.services[0].networkConfiguration;
+  } catch (error) {
+    core.setFailed(error.message);
+    throw(error)
+  }
+
   const overrideContainer = core.getInput("override-container", {
     required: false,
   });
@@ -153,13 +170,7 @@ const main = async () => {
     cluster,
     count: 1,
     launchType: "FARGATE",
-    networkConfiguration: {
-      awsvpcConfiguration: {
-        subnets,
-        assignPublicIp,
-        securityGroups,
-      },
-    },
+    networkConfiguration,
   };
 
   try {
@@ -225,7 +236,7 @@ const main = async () => {
       );
     }
   } catch (error) {
-    core.setFailed(`error catched: ${error.message}`);
+    core.setFailed(error.message);
   }
 };
 
