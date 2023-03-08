@@ -1,5 +1,5 @@
-name: 'Run one-off task on ECS'
-description: 'Run a task on ECS and waits for ECS task to finish.'
+name: 'Run ECS Task from with Definition'
+description: 'Run a task on ECS with a provided task definition, and waits it to finish.'
 branding:
   icon: 'activity'
   color: 'white'
