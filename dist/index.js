@@ -33092,6 +33092,8 @@ async function waitForTasksStopped(clusterName, taskArn, waitForMinutes) {
   await waitUntilTasksStopped({
     client,
     maxWaitTime: waitForMinutes * 60,
+    minDelay: 5,
+    maxDelay: 10
   }, {
     cluster: clusterName,
     tasks: [taskArn],
