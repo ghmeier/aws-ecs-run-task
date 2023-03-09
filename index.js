@@ -1,8 +1,8 @@
 const core = require("@actions/core");
-const AWS = require("aws-sdk");
+const { ECS, waitUntilTasksStopped } = require("@aws-sdk/client-ecs");
 const fs = require('fs');
 
-const ecs = new AWS.ECS();
+const client = new ECS({});
 
 async function registerTaskDefinition(filePath) {
   const taskDefinitionStr = fs.readFileSync(filePath, 'utf8');
@@ -11,7 +11,7 @@ async function registerTaskDefinition(filePath) {
 
   let registerResponse;
   try {
-    registerResponse = await ecs.registerTaskDefinition(taskDefinition).promise();
+    registerResponse = await client.registerTaskDefinition(taskDefinition);
   } catch (error) {
     core.setFailed("Failed to register task definition in ECS: " + error.message);
     core.debug("Task definition contents:");
@@ -28,7 +28,7 @@ async function fetchNetworkConfiguration(cluster, service) {
   try {
     // Get network configuration from aws directly from describe services
     core.debug("Getting information from service...");
-    const info = await ecs.describeServices({ cluster, services: [service] }).promise();
+    const info = await client.describeServices({ cluster, services: [service] });
 
     if (!info || !info.services[0]) {
       throw new Error(`Could not find service ${service} in cluster ${cluster}`);
@@ -53,18 +53,18 @@ async function waitForTasksStopped(clusterName, taskArns, waitForMinutes) {
     waitForMinutes = MAX_WAIT_MINUTES;
   }
 
-  const maxAttempts = (waitForMinutes * 60) / WAIT_DEFAULT_DELAY_SEC;
 
-  core.debug(`Waiting for tasks to stop, attempts: ${maxAttempts}, wait: ${waitForMinutes}.`);
+  core.debug(`Waiting for tasks to stop, wait: ${waitForMinutes}.`);
 
-  const waitTaskResponse = await ecs.waitFor('tasksStopped', {
+  const waitTaskResponse = await waitUntilTasksStopped({
+    client,
+    maxWaitTime: waitForMinutes * 60,
+    minDelay: WAIT_DEFAULT_DELAY_SEC,
+    maxDelay: WAIT_DEFAULT_DELAY_SEC * 2
+  }, {
     cluster: clusterName,
     tasks: taskArns,
-    $waiter: {
-      delay: WAIT_DEFAULT_DELAY_SEC,
-      maxAttempts
-    }
-  }).promise();
+  });
 
   core.debug(`Run task response ${JSON.stringify(waitTaskResponse)}`)
   core.info('All tasks have stopped.');
@@ -72,10 +72,10 @@ async function waitForTasksStopped(clusterName, taskArns, waitForMinutes) {
 
 async function tasksExitCode(clusterName, taskArns) {
   core.debug(`Checking status of ${clusterName} tasks ${taskArns.join(', ')}`);
-  const describeResponse = await ecs.describeTasks({
+  const describeResponse = await client.describeTasks({
     cluster: clusterName,
     tasks: taskArns
-  }).promise();
+  });
 
   const containers = [].concat(...describeResponse.tasks.map(task => task.containers))
   const exitCodes = containers.map(container => container.exitCode)
@@ -152,7 +152,7 @@ const main = async () => {
     }
 
     core.debug("Running task...");
-    let task = await ecs.runTask(taskParams).promise();
+    let task = await client.runTask(taskParams);
     const taskArn = task.tasks[0].taskArn;
     core.setOutput("task-arn", taskArn);
 
