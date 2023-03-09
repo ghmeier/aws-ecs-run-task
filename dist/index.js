@@ -33029,10 +33029,17 @@ var __webpack_exports__ = {};
 // This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
 (() => {
 const core = __nccwpck_require__(42186);
-const { ECS, waitUntilTasksStopped } = __nccwpck_require__(18209);
+const {
+  ECSClient,
+  RegisterTaskDefinitionCommand,
+  DescribeServicesCommand,
+  DescribeTasksCommand,
+  RunTaskCommand,
+  waitUntilTasksStopped
+} = __nccwpck_require__(18209);
 const fs = __nccwpck_require__(57147);
 
-const client = new ECS({});
+const client = new ECSClient({});
 
 async function registerTaskDefinition(filePath) {
   const taskDefinitionStr = fs.readFileSync(filePath, 'utf8');
@@ -33041,7 +33048,7 @@ async function registerTaskDefinition(filePath) {
 
   let registerResponse;
   try {
-    registerResponse = await client.registerTaskDefinition(taskDefinition);
+    registerResponse = await client.send(new RegisterTaskDefinitionCommand(taskDefinition));
   } catch (error) {
     core.setFailed("Failed to register task definition in ECS: " + error.message);
     core.debug("Task definition contents:");
@@ -33058,7 +33065,7 @@ async function fetchNetworkConfiguration(cluster, service) {
   try {
     // Get network configuration from aws directly from describe services
     core.debug("Getting information from service...");
-    const info = await client.describeServices({ cluster, services: [service] });
+    const info = await client.send(new DescribeServicesCommand({ cluster, services: [service] }));
 
     if (!info || !info.services[0]) {
       throw new Error(`Could not find service ${service} in cluster ${cluster}`);
@@ -33078,7 +33085,7 @@ async function fetchNetworkConfiguration(cluster, service) {
 const WAIT_DEFAULT_DELAY_SEC = 5;
 const MAX_WAIT_MINUTES = 60;
 
-async function waitForTasksStopped(clusterName, taskArns, waitForMinutes) {
+async function waitForTasksStopped(clusterName, taskArn, waitForMinutes) {
   if (waitForMinutes > MAX_WAIT_MINUTES) {
     waitForMinutes = MAX_WAIT_MINUTES;
   }
@@ -33093,19 +33100,19 @@ async function waitForTasksStopped(clusterName, taskArns, waitForMinutes) {
     maxDelay: WAIT_DEFAULT_DELAY_SEC * 2
   }, {
     cluster: clusterName,
-    tasks: taskArns,
+    tasks: [taskArn],
   });
 
   core.debug(`Run task response ${JSON.stringify(waitTaskResponse)}`)
   core.info('All tasks have stopped.');
 }
 
-async function tasksExitCode(clusterName, taskArns) {
+async function tasksExitCode(clusterName, taskArn) {
   core.debug(`Checking status of ${clusterName} tasks ${taskArns.join(', ')}`);
-  const describeResponse = await client.describeTasks({
+  const describeResponse = await client.send(new DescribeTasksCommand({
     cluster: clusterName,
-    tasks: taskArns
-  });
+    tasks: [taskArn]
+  }));
 
   const containers = [].concat(...describeResponse.tasks.map(task => task.containers))
   const exitCodes = containers.map(container => container.exitCode)
@@ -33182,13 +33189,13 @@ const main = async () => {
     }
 
     core.debug("Running task...");
-    let task = await client.runTask(taskParams);
+    let task = await client.send(new RunTaskCommand(taskParams));
     const taskArn = task.tasks[0].taskArn;
     core.setOutput("task-arn", taskArn);
 
     if (waitForFinish) {
-      await waitForTasksStopped(cluster, [taskArn], waitForMinutes);
-      await tasksExitCode(cluster, [taskArn])
+      await waitForTasksStopped(cluster, taskArn, waitForMinutes);
+      await tasksExitCode(cluster, taskArn)
     }
   } catch (error) {
     core.setFailed(error.message);
