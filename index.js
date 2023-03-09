@@ -55,7 +55,7 @@ async function waitForTasksStopped(clusterName, taskArns, waitForMinutes) {
 
   const maxAttempts = (waitForMinutes * 60) / WAIT_DEFAULT_DELAY_SEC;
 
-  core.debug(`Waiting for tasks to stop, attempts: ${maxAttempts}.`);
+  core.debug(`Waiting for tasks to stop, attempts: ${maxAttempts}, wait: ${waitForMinutes}.`);
 
   const waitTaskResponse = await ecs.waitFor('tasksStopped', {
     cluster: clusterName,
