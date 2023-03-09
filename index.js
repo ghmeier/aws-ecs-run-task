@@ -4,103 +4,6 @@ const path = require('path');
 const fs = require('fs');
 
 const ecs = new AWS.ECS();
-// Attributes that are returned by DescribeTaskDefinition, but are not valid RegisterTaskDefinition inputs
-const IGNORED_TASK_DEFINITION_ATTRIBUTES = [
-  'compatibilities',
-  'taskDefinitionArn',
-  'requiresAttributes',
-  'revision',
-  'status',
-  'registeredAt',
-  'deregisteredAt',
-  'registeredBy'
-];
-
-function isEmptyValue(value) {
-  if (value === null || value === undefined || value === '') {
-    return true;
-  }
-
-  if (Array.isArray(value)) {
-    for (var element of value) {
-      if (!isEmptyValue(element)) {
-        // the array has at least one non-empty element
-        return false;
-      }
-    }
-    // the array has no non-empty elements
-    return true;
-  }
-
-  if (typeof value === 'object') {
-    for (var childValue of Object.values(value)) {
-      if (!isEmptyValue(childValue)) {
-        // the object has at least one non-empty property
-        return false;
-      }
-    }
-    // the object has no non-empty property
-    return true;
-  }
-
-  return false;
-}
-
-function emptyValueReplacer(_, value) {
-  if (isEmptyValue(value)) {
-    return undefined;
-  }
-
-  if (Array.isArray(value)) {
-    return value.filter(e => !isEmptyValue(e));
-  }
-
-  return value;
-}
-
-function cleanNullKeys(obj) {
-  return JSON.parse(JSON.stringify(obj, emptyValueReplacer));
-}
-
-function removeIgnoredAttributes(taskDef) {
-  for (var attribute of IGNORED_TASK_DEFINITION_ATTRIBUTES) {
-    if (taskDef[attribute]) {
-      core.warning(`Ignoring property '${attribute}' in the task definition file. ` +
-        'This property is returned by the Amazon ECS DescribeTaskDefinition API and may be shown in the ECS console, ' +
-        'but it is not a valid field when registering a new task definition. ' +
-        'This field can be safely removed from your task definition file.');
-      delete taskDef[attribute];
-    }
-  }
-
-  return taskDef;
-}
-
-function maintainValidObjects(taskDef) {
-  if (validateProxyConfigurations(taskDef)) {
-    taskDef.proxyConfiguration.properties.forEach((property, index, arr) => {
-      if (!('value' in property)) {
-        arr[index].value = '';
-      }
-      if (!('name' in property)) {
-        arr[index].name = '';
-      }
-    });
-  }
-
-  if(taskDef && taskDef.containerDefinitions){
-    taskDef.containerDefinitions.forEach((container) => {
-      if(container.environment){
-        container.environment.forEach((property, index, arr) => {
-          if (!('value' in property)) {
-            arr[index].value = '';
-          }
-        });
-      }
-    });
-  }
-  return taskDef;
-}
 
 function wait(ms) {
   return new Promise((resolve) => {
@@ -108,34 +11,27 @@ function wait(ms) {
   });
 }
 
-function validateProxyConfigurations(taskDef){
-  return 'proxyConfiguration' in taskDef && taskDef.proxyConfiguration.type && taskDef.proxyConfiguration.type == 'APPMESH' && taskDef.proxyConfiguration.properties && taskDef.proxyConfiguration.properties.length > 0;
-}
+async function registerTaskDefinition(filePath) {
+  const taskDefinitionStr = fs.readFileSync(filePath, 'utf8');
+  const taskDefinition = JSON.parse(taskDefinitionStr);
 
-const main = async () => {
-  const cluster = core.getInput("cluster", { required: true });
-  const taskDefinitionFile = core.getInput("task-definition", { required: true });
-  const service = core.getInput('service', { required: true });
-  const taskDefPath = path.isAbsolute(taskDefinitionFile) ?
-        taskDefinitionFile :
-        path.join(process.env.GITHUB_WORKSPACE, taskDefinitionFile);
-  const fileContents = fs.readFileSync(taskDefPath, 'utf8');
-  const taskDefContents = maintainValidObjects(removeIgnoredAttributes(cleanNullKeys(JSON.parse(fileContents))));
 
   let registerResponse;
   try {
-    registerResponse = await ecs.registerTaskDefinition(taskDefContents).promise();
+    registerResponse = await ecs.registerTaskDefinition(taskDefinition).promise();
   } catch (error) {
     core.setFailed("Failed to register task definition in ECS: " + error.message);
     core.debug("Task definition contents:");
-    core.debug(JSON.stringify(taskDefContents, undefined, 4));
+    core.debug(JSON.stringify(taskDefinition, undefined, 4));
     throw(error);
   }
   const taskDefArn = registerResponse.taskDefinition.taskDefinitionArn;
   core.setOutput('task-definition-arn', taskDefArn);
 
+  return taskDefArn
+}
 
-  let networkConfiguration;
+async function fetchNetworkConfiguration(cluster, service) {
   try {
     // Get network configuration from aws directly from describe services
     core.debug("Getting information from service...");
@@ -149,11 +45,76 @@ const main = async () => {
       throw new Error(`Service ${service} in cluster ${cluster} does not have a network configuration`);
     }
 
-    networkConfiguration = info.services[0].networkConfiguration;
+    return info.services[0].networkConfiguration;
   } catch (error) {
     core.setFailed(error.message);
     throw(error)
   }
+}
+
+const WAIT_DEFAULT_DELAY_SEC = 5;
+const MAX_WAIT_MINUTES = 60;
+
+async function waitForTasksStopped(clusterName, taskArns, waitForMinutes) {
+  if (waitForMinutes > MAX_WAIT_MINUTES) {
+    waitForMinutes = MAX_WAIT_MINUTES;
+  }
+
+  const maxAttempts = (waitForMinutes * 60) / WAIT_DEFAULT_DELAY_SEC;
+
+  core.debug('Waiting for tasks to stop');
+
+  const waitTaskResponse = await ecs.waitFor('tasksStopped', {
+    cluster: clusterName,
+    tasks: taskArns,
+    $waiter: {
+      delay: WAIT_DEFAULT_DELAY_SEC,
+      maxAttempts: maxAttempts
+    }
+  }).promise();
+
+  core.debug(`Run task response ${JSON.stringify(waitTaskResponse)}`)
+
+  core.info(`All tasks have stopped. Watch progress in the Amazon ECS console: https://console.aws.amazon.com/ecs/home?region=${aws.config.region}#/clusters/${clusterName}/tasks`);
+}
+
+async function tasksExitCode(clusterName, taskArns) {
+  core.debug(`Checking status of ${clusterName} tasks ${taskArns.join(', ')}`);
+  const describeResponse = await ecs.describeTasks({
+    cluster: clusterName,
+    tasks: taskArns
+  }).promise();
+
+  const containers = [].concat(...describeResponse.tasks.map(task => task.containers))
+  const exitCodes = containers.map(container => container.exitCode)
+  const reasons = containers.map(container => container.reason)
+
+  const failuresIdx = [];
+
+  exitCodes.filter((exitCode, index) => {
+    if (exitCode !== 0) {
+      failuresIdx.push(index)
+    }
+  })
+
+  const failures = reasons.filter((_, index) => failuresIdx.indexOf(index) !== -1)
+
+  if (failures.length > 0) {
+    core.setFailed(failures.join("\n"));
+  } else {
+    core.info(`All tasks have exited successfully.`);
+  }
+}
+
+const main = async () => {
+  const cluster = core.getInput("cluster", { required: true });
+  const service = core.getInput('service', { required: true });
+  const taskDefinitionPath = core.getInput("task-definition", { required: true });
+  const waitForFinish = core.getInput('wait-for-finish', { required: false }) || true;
+  const waitForMinutes = parseInt(core.getInput('wait-for-minutes', { required: false })) || 10;
+
+  const taskDefinition = await registerTaskDefinition(taskDefinitionPath);
+  const networkConfiguration = await fetchNetworkConfiguration(cluster, service);
 
   const overrideContainer = core.getInput("override-container", {
     required: false,
@@ -166,7 +127,7 @@ const main = async () => {
   );
 
   const taskParams = {
-    taskDefinition : taskDefArn,
+    taskDefinition,
     cluster,
     count: 1,
     launchType: "FARGATE",
@@ -201,40 +162,9 @@ const main = async () => {
     let task = await ecs.runTask(taskParams).promise();
     const taskArn = task.tasks[0].taskArn;
     core.setOutput("task-arn", taskArn);
-    let started = false;
-    start = new Date();
-    core.info(`Waiting for task to start ${cluster}:${taskArn}`);
-    while(!started) {
-      await wait(10000);
-      try {
-        await ecs.waitFor("tasksRunning", { cluster, tasks: [taskArn] }).promise();
-        started = true;
-      } catch(error) {
-        core.debug(`${cluster}:${taskArn} Failed to get started data ${error.message}`);
-        let now = new Date();
-        if((now - start) > 300000) {
-          throw new Error('Timed out waiting for the container to start');
-        }
-      }
 
-    }
-    core.info(`Waiting for task to finish ${cluster}:${taskArn}`);
-    await ecs.waitFor("tasksStopped", { cluster, tasks: [taskArn] }).promise();
-
-    core.debug("Checking status of task");
-    task = await ecs.describeTasks({ cluster, tasks: [taskArn] }).promise();
-    const exitCode = task.tasks[0].containers[0].exitCode;
-
-    if (exitCode === 0) {
-      core.setOutput("status", "success");
-    } else {
-      core.setFailed(`non-zero exit code: ${task.tasks[0].stoppedReason}`);
-
-      const taskHash = taskArn.split("/").pop();
-      core.info(
-          `task failed, you can check the error on Amazon ECS console: https://console.aws.amazon.com/ecs/home?region=${AWS.config.region}#/clusters/${cluster}/tasks/${taskHash}/details`
-      );
-    }
+    await waitForTasksStopped(cluster, [taskArn], waitForMinutes);
+    await tasksExitCode(cluster, [taskArn])
   } catch (error) {
     core.setFailed(error.message);
   }
