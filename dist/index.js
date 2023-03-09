@@ -33108,7 +33108,7 @@ async function waitForTasksStopped(clusterName, taskArn, waitForMinutes) {
 }
 
 async function tasksExitCode(clusterName, taskArn) {
-  core.debug(`Checking status of ${clusterName} tasks ${taskArns.join(', ')}`);
+  core.debug(`Checking status of ${clusterName} task: ${taskArn}`);
   const describeResponse = await client.send(new DescribeTasksCommand({
     cluster: clusterName,
     tasks: [taskArn]
