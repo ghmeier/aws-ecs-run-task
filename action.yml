@@ -19,6 +19,12 @@ inputs:
   override-container-command:
     description: 'The command to to be run on the overrided container'
     required: false
+  wait-for-minutes:
+    description: 'The number of minutes to wait for the task to stop after it is started (default: 10).'
+    required: false
+  wait-for-finish:
+    description: 'If true, wait for the task to finish before completing the step (defauilt: true).'
+    required: false
 
 outputs:
   task-arn:

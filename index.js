@@ -1,15 +1,8 @@
 const core = require("@actions/core");
 const AWS = require("aws-sdk");
-const path = require('path');
 const fs = require('fs');
 
 const ecs = new AWS.ECS();
-
-function wait(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
 
 async function registerTaskDefinition(filePath) {
   const taskDefinitionStr = fs.readFileSync(filePath, 'utf8');
@@ -69,13 +62,12 @@ async function waitForTasksStopped(clusterName, taskArns, waitForMinutes) {
     tasks: taskArns,
     $waiter: {
       delay: WAIT_DEFAULT_DELAY_SEC,
-      maxAttempts: maxAttempts
+      maxAttempts
     }
   }).promise();
 
   core.debug(`Run task response ${JSON.stringify(waitTaskResponse)}`)
-
-  core.info(`All tasks have stopped. Watch progress in the Amazon ECS console: https://console.aws.amazon.com/ecs/home?region=${aws.config.region}#/clusters/${clusterName}/tasks`);
+  core.info('All tasks have stopped.');
 }
 
 async function tasksExitCode(clusterName, taskArns) {
@@ -107,10 +99,11 @@ async function tasksExitCode(clusterName, taskArns) {
 }
 
 const main = async () => {
+
+  const waitForFinish = (core.getInput('wait-for-finish', { required: false }) || 'true').toLowerCase() === 'true';
   const cluster = core.getInput("cluster", { required: true });
   const service = core.getInput('service', { required: true });
   const taskDefinitionPath = core.getInput("task-definition", { required: true });
-  const waitForFinish = core.getInput('wait-for-finish', { required: false }) || true;
   const waitForMinutes = parseInt(core.getInput('wait-for-minutes', { required: false })) || 10;
 
   const taskDefinition = await registerTaskDefinition(taskDefinitionPath);
@@ -163,8 +156,10 @@ const main = async () => {
     const taskArn = task.tasks[0].taskArn;
     core.setOutput("task-arn", taskArn);
 
-    await waitForTasksStopped(cluster, [taskArn], waitForMinutes);
-    await tasksExitCode(cluster, [taskArn])
+    if (waitForFinish) {
+      await waitForTasksStopped(cluster, [taskArn], waitForMinutes);
+      await tasksExitCode(cluster, [taskArn])
+    }
   } catch (error) {
     core.setFailed(error.message);
   }
