@@ -33085,12 +33085,9 @@ async function fetchNetworkConfiguration(cluster, service) {
 const MAX_WAIT_MINUTES = 60;
 
 async function waitForTasksStopped(clusterName, taskArn, waitForMinutes) {
-  if (waitForMinutes > MAX_WAIT_MINUTES) {
-    waitForMinutes = MAX_WAIT_MINUTES;
-  }
+  if (waitForMinutes > MAX_WAIT_MINUTES) waitForMinutes = MAX_WAIT_MINUTES;
 
-
-  core.debug(`Waiting for ${cluster} task ${taskArn} to stop, wait ${waitForMinutes}min.`);
+  core.debug(`Waiting ${waitForMinutes} minutes for task to stop.`);
 
   await waitUntilTasksStopped({
     client,
