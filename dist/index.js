@@ -33082,7 +33082,6 @@ async function fetchNetworkConfiguration(cluster, service) {
   }
 }
 
-const WAIT_DEFAULT_DELAY_SEC = 5;
 const MAX_WAIT_MINUTES = 60;
 
 async function waitForTasksStopped(clusterName, taskArn, waitForMinutes) {
@@ -33091,20 +33090,17 @@ async function waitForTasksStopped(clusterName, taskArn, waitForMinutes) {
   }
 
 
-  core.debug(`Waiting for tasks to stop, wait: ${waitForMinutes}.`);
+  core.debug(`Waiting for ${cluster} task ${taskArn} to stop, wait ${waitForMinutes}min.`);
 
-  const waitTaskResponse = await waitUntilTasksStopped({
+  await waitUntilTasksStopped({
     client,
     maxWaitTime: waitForMinutes * 60,
-    minDelay: WAIT_DEFAULT_DELAY_SEC,
-    maxDelay: WAIT_DEFAULT_DELAY_SEC * 2
   }, {
     cluster: clusterName,
     tasks: [taskArn],
   });
 
-  core.debug(`Run task response ${JSON.stringify(waitTaskResponse)}`)
-  core.info('All tasks have stopped.');
+  core.info('All task has stopped.');
 }
 
 async function tasksExitCode(clusterName, taskArn) {
