@@ -183,6 +183,9 @@ const main = async () => {
     const taskArn = task.tasks[0].taskArn;
     core.setOutput("task-arn", taskArn);
 
+    const taskIdentity = taskArn.split("/").pop();
+    core.info(`Task started. Watch this task's progress in the Amazon ECS console: https://console.aws.amazon.com/ecs/home?region=${client.config.region}#/clusters/${cluster}/tasks/${taskIdentity}/details`);
+
     if (waitForFinish) {
       await waitForTasksStopped(cluster, taskArn, waitForMinutes);
       await tasksExitCode(cluster, taskArn)
