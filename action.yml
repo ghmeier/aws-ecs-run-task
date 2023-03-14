@@ -9,7 +9,10 @@ inputs:
     required: false
   task-definition:
     description: 'The name of the task-definition'
-    required: true
+    required: false
+  task-definition-family:
+    description: 'A task definition family to use'
+    required: false
   service:
     description: 'The service to pull subnet and security groups from'
     required: true

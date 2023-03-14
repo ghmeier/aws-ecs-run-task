@@ -4,6 +4,7 @@ const {
   RegisterTaskDefinitionCommand,
   DescribeServicesCommand,
   DescribeTasksCommand,
+  DescribeTaskDefinitionCommand,
   RunTaskCommand,
   waitUntilTasksStopped
 } = require("@aws-sdk/client-ecs");
@@ -29,6 +30,20 @@ async function registerTaskDefinition(filePath) {
   core.setOutput('task-definition-arn', taskDefArn);
 
   return taskDefArn
+}
+
+async function fetchTaskDefinitionArn(taskDefinition) {
+  try {
+    core.debug(`Getting ${taskDefinition}'s latest task definition.`)
+    const response = await client.send(new DescribeTaskDefinitionCommand({ taskDefinition }))
+    if (!response || !response.taskDefinition) throw new Error(`${taskDefinition} not found.`)
+      const taskDefArn = response.taskDefinition.taskDefinitionArn;
+      core.setOutput('task-definition-arn', taskDefArn);
+      return taskDefArn
+  } catch (error) {
+    core.setFailed(error.message)
+    throw(error)
+  }
 }
 
 async function fetchNetworkConfiguration(cluster, service) {
@@ -105,10 +120,20 @@ const main = async () => {
   const waitForFinish = (core.getInput('wait-for-finish', { required: false }) || 'true').toLowerCase() === 'true';
   const cluster = core.getInput("cluster", { required: true });
   const service = core.getInput('service', { required: true });
-  const taskDefinitionPath = core.getInput("task-definition", { required: true });
+  const taskDefinitionPath = core.getInput("task-definition", { required: false });
+  const taskDefinitionFamily = core.getInput("task-definition-family", {required: false })
+  if (!taskDefinitionPath && !taskDefinitionFamily) {
+    core.setFailed('task-definition-family or task-definition are required.');
+    return
+  }
   const waitForMinutes = parseInt(core.getInput('wait-for-minutes', { required: false })) || 10;
+  let taskDefinitionArn;
+  if (!taskDefinitionFamily) {
+    taskDefinitionArn = await registerTaskDefinition(taskDefinitionPath);
+  } else {
+    taskDefinitionArn = await fetchTaskDefinitionArn(taskDefinitionFamily)
+  }
 
-  const taskDefinition = await registerTaskDefinition(taskDefinitionPath);
   const networkConfiguration = await fetchNetworkConfiguration(cluster, service);
 
   const overrideContainer = core.getInput("override-container", {
@@ -122,7 +147,7 @@ const main = async () => {
   );
 
   const taskParams = {
-    taskDefinition,
+    taskDefinition: taskDefinitionArn,
     cluster,
     count: 1,
     launchType: "FARGATE",
