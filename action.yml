@@ -19,6 +19,10 @@ inputs:
   override-container:
     description: 'The container whose command should be overridden'
     required: false
+  override-container-memory:
+    description: "If override-container is provided, this overrides the container's allocated memory."
+  override-container-cpu:
+    description: "If override-container is provided, this overrides the container's allocated cpu."
   override-container-command:
     description: 'The command to to be run on the overrided container'
     required: false

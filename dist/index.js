@@ -33150,6 +33150,7 @@ const main = async () => {
   const waitForFinish = (core.getInput('wait-for-finish', { required: false }) || 'true').toLowerCase() === 'true';
   const cluster = core.getInput("cluster", { required: true });
   const service = core.getInput('service', { required: true });
+
   const taskDefinitionPath = core.getInput("task-definition", { required: false });
   const taskDefinitionFamily = core.getInput("task-definition-family", {required: false })
   if (!taskDefinitionPath && !taskDefinitionFamily) {
@@ -33201,6 +33202,18 @@ const main = async () => {
               },
           ],
         };
+
+        const taskMemory = parseInt(core.getInput('override-container-memory', { required: false }) || 0)
+        if (taskMemory) {
+          taskParams.overrides.containerOverrides[0].memory = taskMemory;
+          taskParams.overrides.memory = taskMemory;
+        }
+
+        const taskCpu = parseInt(core.getInput("override-container-cpu", { required: false }) || 0)
+        if (taskCpu) {
+          taskParams.overrides.containerOverrides[0].cpu = taskCpu;
+          taskParams.overrides.cpu = taskCpu;
+        }
       } else {
         throw new Error(
             "override-container-command is required when override-container is set"
