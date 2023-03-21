@@ -175,13 +175,13 @@ const main = async () => {
 
         const taskMemory = core.getInput('override-container-memory', { required: false })
         if (taskMemory) {
-          taskParams.overrides.containerOverrides[0].memory = taskMemory;
+          taskParams.overrides.containerOverrides[0].memory = parseInt(taskMemory, 10);
           taskParams.overrides.memory = taskMemory;
         }
 
         const taskCpu = core.getInput("override-container-cpu", { required: false })
         if (taskCpu) {
-          taskParams.overrides.containerOverrides[0].cpu = taskCpu;
+          taskParams.overrides.containerOverrides[0].cpu = parseInt(taskCpu, 10);
           taskParams.overrides.cpu = taskCpu;
         }
       } else {
