@@ -39,5 +39,5 @@ outputs:
   status:
     description: 'The status of the task, success for sucesssful tasks.'
 runs:
-  using: 'node16'
+  using: 'node20'
   main: 'dist/index.js'
