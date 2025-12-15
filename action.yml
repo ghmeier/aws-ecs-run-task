@@ -42,5 +42,5 @@ outputs:
   status:
     description: 'The status of the task, success for sucesssful tasks.'
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/index.js'
