@@ -155,39 +155,38 @@ const main = async () => {
     networkConfiguration,
   };
 
+  const hasOverrideCommand = !!overrideContainerCommand.length
+
   try {
-    if (overrideContainerCommand.length > 0 && !overrideContainer) {
+    if (hasOverrideCommand && !overrideContainer) {
       throw new Error(
           "override-container is required when override-container-command is set"
       );
     }
 
     if (overrideContainer) {
-      if (overrideContainerCommand) {
-        taskParams.overrides = {
-          containerOverrides: [
-              {
-                name: overrideContainer,
-                command: overrideContainerCommand,
-              },
-          ],
-        };
-
-        const taskMemory = core.getInput('override-container-memory', { required: false })
-        if (taskMemory) {
-          taskParams.overrides.containerOverrides[0].memory = parseInt(taskMemory, 10);
-          taskParams.overrides.memory = taskMemory;
-        }
-
-        const taskCpu = core.getInput("override-container-cpu", { required: false })
-        if (taskCpu) {
-          taskParams.overrides.containerOverrides[0].cpu = parseInt(taskCpu, 10);
-          taskParams.overrides.cpu = taskCpu;
-        }
-      } else {
+      if (!hasOverrideCommand) {
         throw new Error(
             "override-container-command is required when override-container is set"
         );
+      }
+
+      taskParams.overrides = { containerOverrides: [{ name: overrideContainer }] };
+
+      if (overrideContainerCommand) {
+        taskParams.overrides.containerOverrides[0].command =  overrideContainerCommand;
+      }
+
+      const taskMemory = core.getInput('override-container-memory', { required: false })
+      if (taskMemory) {
+        taskParams.overrides.containerOverrides[0].memory = parseInt(taskMemory, 10);
+        taskParams.overrides.memory = taskMemory;
+      }
+
+      const taskCpu = core.getInput("override-container-cpu", { required: false })
+      if (taskCpu) {
+        taskParams.overrides.containerOverrides[0].cpu = parseInt(taskCpu, 10);
+        taskParams.overrides.cpu = taskCpu;
       }
     }
 
