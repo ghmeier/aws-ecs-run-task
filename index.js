@@ -146,12 +146,6 @@ const main = async () => {
         required: false,
       }
   );
-  const overrideContainerEntrypoint = core.getMultilineInput(
-      "override-container-entrypoint",
-      {
-        required: false,
-      }
-  );
 
   const taskParams = {
     taskDefinition: taskDefinitionArn,
@@ -161,19 +155,19 @@ const main = async () => {
     networkConfiguration,
   };
 
-  const hasOverrideCommand = !!(overrideContainerCommand.length || overrideContainerEntrypoint.length)
+  const hasOverrideCommand = !!overrideContainerCommand.length
 
   try {
     if (hasOverrideCommand && !overrideContainer) {
       throw new Error(
-          "override-container is required when override-container-command or override-container-entrypoint are set"
+          "override-container is required when override-container-command is set"
       );
     }
 
     if (overrideContainer) {
-      if (!hasOverrideCommand ) {
+      if (!hasOverrideCommand) {
         throw new Error(
-            "override-container-command or override-container-entrypoint are required when override-container is set"
+            "override-container-command is required when override-container is set"
         );
       }
 
@@ -181,10 +175,6 @@ const main = async () => {
 
       if (overrideContainerCommand) {
         taskParams.overrides.containerOverrides[0].command =  overrideContainerCommand;
-      }
-
-      if (overrideContainerEntrypoint) {
-        taskParams.overrides.containerOverrides[0].entryPoint =  overrideContainerEntrypoint;
       }
 
       const taskMemory = core.getInput('override-container-memory', { required: false })

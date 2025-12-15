@@ -26,9 +26,6 @@ inputs:
   override-container-command:
     description: 'The command to be run on the overridden container'
     required: false
-  override-container-entrypoint:
-    description: 'The entrypoint to be run on the overridden container'
-    required: false
   wait-for-minutes:
     description: 'The number of minutes to wait for the task to stop after it is started (default: 10).'
     required: false
