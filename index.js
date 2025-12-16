@@ -174,7 +174,7 @@ const main = async () => {
       taskParams.overrides = { containerOverrides: [{ name: overrideContainer }] };
 
       if (overrideContainerCommand) {
-        taskParams.overrides.containerOverrides[0].command =  overrideContainerCommand;
+        taskParams.overrides.containerOverrides[0].command =  overrideContainerCommand.split(/\s+/);
       }
 
       const taskMemory = core.getInput('override-container-memory', { required: false })
